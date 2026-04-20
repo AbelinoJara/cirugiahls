@@ -23,9 +23,43 @@
   ];
 
   const SECTORS = [
-    { key: "hombres", name: "Sector Hombres", start: 115, end: 140 },
-    { key: "mujeres", name: "Sector Mujeres", start: 141, end: 160 },
-    { key: "uceq", name: "Sector UCEQ", start: 161, end: 165 },
+    {
+      key: "hombres",
+      name: "Sector Hombres",
+      start: 115,
+      end: 140,
+      rooms: [
+        { name: "Sala 1", start: 115, end: 120 },
+        { name: "Sala 2", start: 121, end: 126 },
+        { name: "Sala 3", start: 127, end: 129 },
+        { name: "Sala 4", start: 130, end: 132 },
+        { name: "Sala 5", start: 133, end: 134 },
+        { name: "Sala 6", start: 135, end: 136 },
+        { name: "Sala 7", start: 137, end: 138 },
+        { name: "Sala 8", start: 139, end: 140 },
+      ],
+    },
+    {
+      key: "mujeres",
+      name: "Sector Mujeres",
+      start: 141,
+      end: 160,
+      rooms: [
+        { name: "Sala 1", start: 141, end: 143 },
+        { name: "Sala 2", start: 144, end: 145 },
+        { name: "Sala 3", start: 146, end: 149 },
+        { name: "Sala 4", start: 150, end: 151 },
+        { name: "Sala 5", start: 152, end: 154 },
+        { name: "Sala 6", start: 155, end: 160 },
+      ],
+    },
+    {
+      key: "uceq",
+      name: "Sector UCEQ",
+      start: 161,
+      end: 165,
+      rooms: [{ name: "UCEQ", start: 161, end: 165 }],
+    },
   ];
 
   const DEFAULT_EXAMS = ["Hemoglobina", "Leucocitos", "PCR", "Creatinina", "Lactato"];
@@ -50,6 +84,10 @@
       diagnosis: "",
       surgeryName: "",
     },
+    dashboardTeamFilters: [],
+    showHeaderStats: false,
+    showDashboardFilters: false,
+    showHistoryFilters: false,
   };
 
   const app = document.getElementById("app");
@@ -99,9 +137,16 @@
   function getBeds() {
     const beds = [];
     SECTORS.forEach((sector) => {
-      for (let number = sector.start; number <= sector.end; number += 1) {
-        beds.push({ bedNumber: number, sector: sector.name, sectorKey: sector.key });
-      }
+      sector.rooms.forEach((room) => {
+        for (let number = room.start; number <= room.end; number += 1) {
+          beds.push({
+            bedNumber: number,
+            sector: sector.name,
+            sectorKey: sector.key,
+            roomName: room.name,
+          });
+        }
+      });
     });
     return beds;
   }
@@ -138,6 +183,8 @@
       labs: { dates: [nowIsoDate()], exams: labs },
       images: [],
       notes: "",
+      noteDraft: "",
+      notesEntries: [],
     };
   }
 
@@ -156,6 +203,84 @@
     });
   }
 
+  function getSectorFilteredBeds(sectorBeds) {
+    if (!state.dashboardTeamFilters.length) return sectorBeds;
+    return sectorBeds.filter((bed) => {
+      const caseData = state.activeCases[String(bed.bedNumber)];
+      return caseData && state.dashboardTeamFilters.includes(caseData.team);
+    });
+  }
+
+  function nextUniqueLabDate(existingDates, baseDate) {
+    const used = new Set(existingDates.filter(Boolean));
+    let current = baseDate || nowIsoDate();
+    while (used.has(current)) {
+      const date = new Date(`${current}T00:00:00`);
+      date.setDate(date.getDate() + 1);
+      current = date.toISOString().slice(0, 10);
+    }
+    return current;
+  }
+
+  function countActiveHistoryFilters() {
+    return Object.values(state.historyFilters).filter((value) => String(value || "").trim()).length;
+  }
+
+  function getCaseNotesEntries(caseItem) {
+    const entries = Array.isArray(caseItem.notesEntries) ? caseItem.notesEntries.filter((item) => String(item.text || "").trim()) : [];
+    if (entries.length) return entries;
+    if (String(caseItem.notes || "").trim()) {
+      return [
+        {
+          id: uid(),
+          text: caseItem.notes,
+          createdAt: caseItem.updatedAt || caseItem.archivedAt || caseItem.createdAt || new Date().toISOString(),
+        },
+      ];
+    }
+    return [];
+  }
+
+  function formatDateTime(value) {
+    if (!value) return "-";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString("es-CL", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function getPrimaryDiagnosis(caseItem) {
+    return (caseItem.diagnoses || []).find((item) => String(item || "").trim()) || "";
+  }
+
+  function renderNotesHistory(caseItem) {
+    const entries = getCaseNotesEntries(caseItem);
+    if (!entries.length) {
+      return `<div style="margin-top:12px; color:#78716c;">Sin notas registradas.</div>`;
+    }
+    return `
+      <div class="stack" style="margin-top:12px;">
+        ${entries
+          .slice()
+          .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+          .map(
+            (entry) => `
+              <div class="card" style="box-shadow:none; background:white; padding:14px;">
+                <div class="small" style="margin-bottom:8px;">${formatDateTime(entry.createdAt)}</div>
+                <div style="white-space:pre-wrap; line-height:1.7; color:#57534e;">${escapeHtml(entry.text || "")}</div>
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+    `;
+  }
+
   function matchesFilters(caseItem) {
     const filters = state.historyFilters;
     const bundle = [
@@ -164,6 +289,7 @@
       caseItem.bedNumber,
       caseItem.sector,
       caseItem.notes,
+      ...getCaseNotesEntries(caseItem).map((item) => item.text),
       ...(caseItem.diagnoses || []),
       ...((caseItem.surgeries || []).map((item) => `${item.name} ${item.surgeon}`)),
     ]
@@ -200,8 +326,7 @@
       <div class="login-wrap">
         <div class="login-grid">
           <section class="login-card">
-            <div class="eyebrow">Servicio de Cirugia</div>
-            <h1 style="margin-top:18px;">CirugiaHLS</h1>
+            ${renderHospitalBrand("Monitor de Pacientes", true)}
             <p class="lead">Gestion clinica precisa para camas quirurgicas, seguimiento longitudinal y archivo reutilizable de casos.</p>
             <div class="metrics">
               <div class="metric">
@@ -232,7 +357,7 @@
                 <input class="input" name="password" type="password" value="${escapeHtml(DEFAULT_CREDENTIALS.password)}" />
               </div>
               ${state.loginError ? `<div class="error">${escapeHtml(state.loginError)}</div>` : ""}
-              <button class="btn btn-dark" type="submit">Entrar a CirugiaHLS</button>
+              <button class="btn btn-dark" type="submit">Entrar a Monitor de Pacientes</button>
             </form>
             <div class="muted-box">
               Usuario demo: <strong>${escapeHtml(DEFAULT_CREDENTIALS.username)}</strong><br />
@@ -255,8 +380,7 @@
           <div class="container header-inner">
             <div class="header-top">
               <div>
-                <div class="eyebrow">Servicio de Cirugia</div>
-                <h1 style="margin-top:12px;">CirugiaHLS</h1>
+                ${renderHospitalBrand("Monitor de Pacientes")}
                 <p class="lead">Gestion activa de camas, seguimiento clinico y archivo estructurado de casos quirurgicos.</p>
               </div>
               <div class="row wrap">
@@ -264,14 +388,64 @@
                 <button class="btn btn-light" data-action="logout">Cerrar sesion</button>
               </div>
             </div>
-            <div class="stats-grid">
-              ${renderStat("Camas ocupadas", occupied, `${free} libres en total`)}
-              ${renderStat("Camas libres", free, `${beds.length} camas habilitadas`)}
-              ${stats.map((item) => renderStat(item.sector, `${item.percent}%`, `${item.occupied} ocupadas / ${item.total} camas`)).join("")}
-            </div>
-            <div class="tabs">
-              <button class="btn ${state.view === "dashboard" ? "btn-dark" : "btn-light"}" data-view="dashboard">Tablero</button>
-              <button class="btn ${state.view === "history" ? "btn-dark" : "btn-light"}" data-view="history">Historial de casos</button>
+            <div class="panel compact-panel">
+              <div class="collapsible-head">
+                <div class="collapsible-title">
+                  <div style="font-weight:700;">Resumen de ocupacion</div>
+                  <div class="small">Ocupadas ${occupied} · Libres ${free} · Total ${beds.length}</div>
+                </div>
+                <div class="row wrap">
+                  <div class="compact-summary">
+                    ${stats.map((item) => `<span class="compact-chip">${escapeHtml(item.sector)} ${item.percent}%</span>`).join("")}
+                  </div>
+                  <div class="tabs">
+                    <button class="btn btn-compact ${state.view === "dashboard" ? "btn-dark" : "btn-light"}" data-view="dashboard">Tablero</button>
+                    <button class="btn btn-compact ${state.view === "history" ? "btn-dark" : "btn-light"}" data-view="history">Historial</button>
+                  </div>
+                  ${
+                    state.view === "dashboard"
+                      ? `
+                        ${state.dashboardTeamFilters.length ? `<button class="btn btn-ghost btn-compact" data-action="clear-dashboard-team-filters">Limpiar equipos</button>` : ""}
+                        <button class="btn btn-ghost btn-compact" data-action="toggle-dashboard-filters">
+                          ${state.showDashboardFilters ? "Ocultar equipos" : "Filtrar equipos"}
+                        </button>
+                      `
+                      : ""
+                  }
+                  <button class="btn btn-ghost btn-compact" data-action="toggle-header-stats">
+                    ${state.showHeaderStats ? "Ocultar detalle" : "Ver detalle"}
+                  </button>
+                </div>
+              </div>
+              ${
+                state.view === "dashboard" && state.showDashboardFilters
+                  ? `
+                    <div class="collapsible-body">
+                      <div class="row wrap">
+                        ${TEAM_OPTIONS.map((team) => `
+                          <button
+                            class="team-badge"
+                            data-action="toggle-dashboard-team-filter"
+                            data-team="${escapeHtml(team.value)}"
+                            style="background:${state.dashboardTeamFilters.includes(team.value) ? team.bg : "#fafaf9"}; color:${state.dashboardTeamFilters.includes(team.value) ? team.color : "#57534e"}; border-color:${state.dashboardTeamFilters.includes(team.value) ? team.border : "#d6d3d1"}; cursor:pointer;"
+                          >
+                            ${escapeHtml(team.label)}
+                          </button>
+                        `).join("")}
+                      </div>
+                    </div>
+                  `
+                  : ""
+              }
+              ${state.showHeaderStats ? `
+                <div class="collapsible-body">
+                  <div class="stats-grid">
+                    ${renderStat("Camas ocupadas", occupied, `${free} libres en total`)}
+                    ${renderStat("Camas libres", free, `${beds.length} camas habilitadas`)}
+                    ${stats.map((item) => renderStat(item.sector, `${item.percent}%`, `${item.occupied} ocupadas / ${item.total} camas`)).join("")}
+                  </div>
+                </div>
+              ` : ""}
             </div>
           </div>
         </header>
@@ -297,11 +471,55 @@
     `;
   }
 
+  function renderHospitalBrand(title, large = false) {
+    return `
+      <div class="brand-lockup">
+        <div class="brand-logo-wrap ${large ? "large" : ""}" aria-hidden="true">
+          <img src="./logo1.png" alt="" class="brand-logo-banner ${large ? "large" : ""}" />
+        </div>
+        <div class="brand-meta">
+          <div class="brand-hospital ${large ? "large" : ""}">Hospital de La Serena</div>
+          <h1 style="margin:0; font-size:${large ? "clamp(30px, 4vw, 42px)" : "clamp(28px, 3.4vw, 40px)"};">${escapeHtml(title)}</h1>
+          <div class="brand-subtle">Servicio de Cirugia</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function getRoomCardClass(sector, room) {
+    const bedCount = room.end - room.start + 1;
+    if (sector.key === "hombres") {
+      const customMap = {
+        "Sala 1": "span-12 beds-6",
+        "Sala 2": "span-12 beds-6",
+        "Sala 3": "span-6 beds-3",
+        "Sala 4": "span-6 beds-3",
+        "Sala 5": "span-3 beds-2-vertical",
+        "Sala 6": "span-3 beds-2-vertical",
+        "Sala 7": "span-3 beds-2-vertical",
+        "Sala 8": "span-3 beds-2-vertical",
+      };
+      return customMap[room.name] || "span-6";
+    }
+
+    if (sector.key === "uceq") {
+      return "span-12 beds-5";
+    }
+
+    if (bedCount <= 2) return "span-4 beds-2";
+    if (bedCount <= 3) return "span-6 beds-3";
+    if (bedCount <= 4) return "span-8 beds-4";
+    if (bedCount <= 5) return "span-10 beds-5";
+    return "span-12 beds-6";
+  }
+
   function renderDashboard() {
     const beds = getBeds();
-    return SECTORS.map((sector) => {
+    return `
+      ${SECTORS.map((sector) => {
       const sectorBeds = beds.filter((bed) => bed.sectorKey === sector.key);
       const occupied = sectorBeds.filter((bed) => state.activeCases[String(bed.bedNumber)]).length;
+      const visibleBeds = getSectorFilteredBeds(sectorBeds);
       return `
         <section class="panel sector-section">
           <div class="section-top">
@@ -311,12 +529,34 @@
             </div>
             <div class="session-badge">${occupied} ocupadas / ${sectorBeds.length}</div>
           </div>
-          <div class="sector-beds">
-            ${sectorBeds.map((bed) => renderBedCard(bed)).join("")}
-          </div>
+          ${
+            visibleBeds.length
+              ? `<div class="room-grid">
+                  ${sector.rooms.map((room) => {
+                    const roomBeds = visibleBeds.filter((bed) => bed.roomName === room.name);
+                    if (!roomBeds.length) return "";
+                    return `
+                      <section class="item-card room-card ${getRoomCardClass(sector, room)}">
+                        <div class="section-top" style="margin-bottom:14px;">
+                          <div>
+                            <h3>${escapeHtml(room.name)}</h3>
+                            <div class="small" style="margin-top:6px;">Camas ${room.start} a ${room.end}</div>
+                          </div>
+                          <div class="session-badge">${roomBeds.filter((bed) => state.activeCases[String(bed.bedNumber)]).length} visibles</div>
+                        </div>
+                        <div class="sector-beds">
+                          ${roomBeds.map((bed) => renderBedCard(bed)).join("")}
+                        </div>
+                      </section>
+                    `;
+                  }).join("")}
+                </div>`
+              : `<div class="empty-box">No hay camas para los equipos seleccionados en este sector.</div>`
+          }
         </section>
       `;
-    }).join("");
+    }).join("")}
+    `;
   }
 
   function renderBedCard(bed) {
@@ -335,18 +575,19 @@
       `;
     }
     const team = getTeam(caseData.team);
+    const primaryDiagnosis = getPrimaryDiagnosis(caseData);
     return `
       <button class="bed-card occupied" data-action="open-bed" data-bed="${bed.bedNumber}">
+        <div class="bed-team-line" style="background:${team.line};"></div>
         <div class="bed-head">
           <div class="small">Cama ${bed.bedNumber}</div>
           <div class="status occupied">Ocupada</div>
         </div>
         <div class="bed-body">
           <div class="patient-name">${escapeHtml(caseData.patientName || "Sin nombre")}</div>
+          ${primaryDiagnosis ? `<div class="small" style="margin-top:6px;">Dx: ${escapeHtml(primaryDiagnosis)}</div>` : ""}
           <div class="small" style="margin-top:8px;">${getDayCount(caseData.admissionDate, caseData.dischargeDate)} dias hospitalizado</div>
-          <div style="margin-top:14px;">
-            ${renderTeamBadge(team)}
-          </div>
+          <div class="small" style="margin-top:8px;">${escapeHtml(bed.roomName || bed.sector)}</div>
           <div class="tags">
             ${(caseData.tags || []).slice(0, 4).map((tag) => renderTag(tag)).join("")}
           </div>
@@ -357,30 +598,47 @@
 
   function renderHistory() {
     const filtered = state.history.filter(matchesFilters);
+    const activeFilterCount = countActiveHistoryFilters();
     return `
-      <section class="panel">
-        <div class="section-top">
-          <div>
-            <h2>Filtros avanzados</h2>
-            <p class="lead" style="margin-top:6px;">Busca por nombre, RUT, cama, sector, equipo, fechas, cirujano, diagnostico o cirugia.</p>
+      <section class="panel compact-panel">
+        <div class="collapsible-head">
+          <div class="collapsible-title">
+            <div style="font-weight:700;">Filtros del historial</div>
+            <div class="small">
+              ${
+                activeFilterCount
+                  ? `${activeFilterCount} filtro(s) activos · ${filtered.length} caso(s) visibles`
+                  : `Sin filtros activos · ${filtered.length} caso(s) visibles`
+              }
+            </div>
+          </div>
+          <div class="row wrap">
+            ${activeFilterCount ? `<button class="btn btn-ghost" data-action="clear-history-filters">Limpiar</button>` : ""}
+            <button class="btn btn-ghost" data-action="toggle-history-filters">
+              ${state.showHistoryFilters ? "Ocultar filtros" : "Mostrar filtros"}
+            </button>
           </div>
         </div>
-        <div class="filters-grid">
-          ${renderField("Busqueda libre", "search", state.historyFilters.search)}
-          ${renderSelectField("Sector", "sector", [
-            { value: "", label: "Todos" },
-            ...SECTORS.map((sector) => ({ value: sector.name, label: sector.name })),
-          ], state.historyFilters.sector)}
-          ${renderSelectField("Equipo", "team", [
-            { value: "", label: "Todos" },
-            ...TEAM_OPTIONS.map((team) => ({ value: team.value, label: team.label })),
-          ], state.historyFilters.team)}
-          ${renderField("Cirujano", "surgeon", state.historyFilters.surgeon)}
-          ${renderField("Alta desde", "dischargeFrom", state.historyFilters.dischargeFrom, "date")}
-          ${renderField("Alta hasta", "dischargeTo", state.historyFilters.dischargeTo, "date")}
-          ${renderField("Diagnostico", "diagnosis", state.historyFilters.diagnosis)}
-          ${renderField("Nombre de cirugia", "surgeryName", state.historyFilters.surgeryName)}
-        </div>
+        ${state.showHistoryFilters ? `
+          <div class="collapsible-body">
+            <div class="filters-grid">
+              ${renderField("Busqueda libre", "search", state.historyFilters.search)}
+              ${renderSelectField("Sector", "sector", [
+                { value: "", label: "Todos" },
+                ...SECTORS.map((sector) => ({ value: sector.name, label: sector.name })),
+              ], state.historyFilters.sector)}
+              ${renderSelectField("Equipo", "team", [
+                { value: "", label: "Todos" },
+                ...TEAM_OPTIONS.map((team) => ({ value: team.value, label: team.label })),
+              ], state.historyFilters.team)}
+              ${renderField("Cirujano", "surgeon", state.historyFilters.surgeon)}
+              ${renderField("Alta desde", "dischargeFrom", state.historyFilters.dischargeFrom, "date")}
+              ${renderField("Alta hasta", "dischargeTo", state.historyFilters.dischargeTo, "date")}
+              ${renderField("Diagnostico", "diagnosis", state.historyFilters.diagnosis)}
+              ${renderField("Nombre de cirugia", "surgeryName", state.historyFilters.surgeryName)}
+            </div>
+          </div>
+        ` : ""}
       </section>
       <section class="history-list" style="margin-top:18px;">
         ${
@@ -447,7 +705,7 @@
           </div>
           <div class="item-card">
             <h3>Notas</h3>
-            <div style="margin-top:12px; white-space:pre-wrap; line-height:1.7; color:#57534e;">${escapeHtml(caseItem.notes || "Sin notas registradas.")}</div>
+            ${renderNotesHistory(caseItem)}
           </div>
         </div>
         <div class="stack">
@@ -661,13 +919,20 @@
 
               <section class="panel">
                 <h3>Notas libres</h3>
-                <textarea class="textarea" data-modal-field="notes" style="margin-top:14px;" placeholder="Evolucion, indicaciones, pendientes y observaciones clinicas.">${escapeHtml(caseData.notes || "")}</textarea>
+                <textarea class="textarea" data-modal-field="noteDraft" style="margin-top:14px; min-height:140px;" placeholder="Evolucion, indicaciones, pendientes y observaciones clinicas.">${escapeHtml(caseData.noteDraft || "")}</textarea>
+                <div class="row end" style="margin-top:12px;">
+                  <button class="btn btn-dark" data-action="add-note-entry" ${!String(caseData.noteDraft || "").trim() ? "disabled" : ""}>Registrar</button>
+                </div>
+                <div class="item-card" style="margin-top:14px;">
+                  <h3 style="font-size:16px;">Historial de notas</h3>
+                  ${renderNotesHistory(caseData)}
+                </div>
               </section>
             </div>
           </div>
           <div class="drawer-foot">
             <div class="small">${caseData.patientName ? `${escapeHtml(caseData.patientName)} · ${escapeHtml(caseData.rut || "sin RUT")}` : "Paciente pendiente de asignacion"}</div>
-            <button class="btn btn-dark" data-action="save-bed" ${!caseData.patientName.trim() || !caseData.rut.trim() ? "disabled" : ""}>Guardar cama</button>
+            <button id="save-bed-button" class="btn btn-dark" data-action="save-bed" ${!caseData.patientName.trim() || !caseData.rut.trim() ? "disabled" : ""}>Guardar cama</button>
           </div>
         </div>
       </div>
@@ -704,13 +969,17 @@
           <p class="lead" style="margin-top:10px;">El caso volvera al tablero activo en una cama libre y se eliminara del historial.</p>
           <div class="field" style="margin-top:18px;">
             <label>Cama disponible</label>
-            <select class="select" id="reactivate-bed">
-              ${freeBeds.map((bed) => `<option value="${bed.bedNumber}">Cama ${bed.bedNumber} · ${escapeHtml(bed.sector)}</option>`).join("")}
-            </select>
+            ${
+              freeBeds.length
+                ? `<select class="select" id="reactivate-bed">
+                    ${freeBeds.map((bed) => `<option value="${bed.bedNumber}">Cama ${bed.bedNumber} · ${escapeHtml(bed.sector)} · ${escapeHtml(bed.roomName || "")}</option>`).join("")}
+                  </select>`
+                : `<div class="error">No hay camas libres disponibles para reactivar este caso.</div>`
+            }
           </div>
           <div class="row end" style="margin-top:22px;">
             <button class="btn btn-light" data-action="cancel-reactivate">Cancelar</button>
-            <button class="btn btn-dark" data-action="confirm-reactivate">Reactivar</button>
+            <button class="btn btn-dark" data-action="confirm-reactivate" ${freeBeds.length ? "" : "disabled"}>Reactivar</button>
           </div>
         </div>
       </div>
@@ -866,12 +1135,26 @@
 
     bindModalFieldInputs();
     bindFileInteractions();
+    syncModalSaveButtonState();
+  }
+
+  function syncModalSaveButtonState() {
+    const button = document.getElementById("save-bed-button");
+    if (!state.modal) return;
+    if (button) {
+      button.disabled = !String(state.modal.patientName || "").trim() || !String(state.modal.rut || "").trim();
+    }
+    const noteButton = app.querySelector('[data-action="add-note-entry"]');
+    if (noteButton) {
+      noteButton.disabled = !String(state.modal.noteDraft || "").trim();
+    }
   }
 
   function bindModalFieldInputs() {
     app.querySelectorAll('[data-action="modal-field"]').forEach((input) => {
       input.addEventListener("input", () => {
         state.modal[input.dataset.field] = input.value;
+        syncModalSaveButtonState();
       });
     });
 
@@ -900,8 +1183,10 @@
       input.addEventListener("input", () => {
         const index = Number(input.dataset.index);
         const previous = state.modal.labs.dates[index];
-        const next = input.value;
+        const siblingDates = state.modal.labs.dates.filter((_, itemIndex) => itemIndex !== index);
+        const next = nextUniqueLabDate(siblingDates, input.value || nowIsoDate());
         state.modal.labs.dates[index] = next;
+        input.value = next;
         Object.keys(state.modal.labs.exams).forEach((exam) => {
           const values = state.modal.labs.exams[exam];
           if (Object.prototype.hasOwnProperty.call(values, previous)) {
@@ -1003,7 +1288,51 @@
     if (action === "open-bed") {
       const bedNumber = Number(event.currentTarget.dataset.bed);
       const bed = getBeds().find((item) => item.bedNumber === bedNumber);
-      state.modal = cloneCase(state.activeCases[String(bedNumber)] || emptyCase(bed));
+      state.modal = normalizeCaseData(cloneCase(state.activeCases[String(bedNumber)] || emptyCase(bed)));
+      render();
+      return;
+    }
+    if (action === "toggle-dashboard-team-filter") {
+      const team = event.currentTarget.dataset.team;
+      if (state.dashboardTeamFilters.includes(team)) {
+        state.dashboardTeamFilters = state.dashboardTeamFilters.filter((item) => item !== team);
+      } else {
+        state.dashboardTeamFilters = [...state.dashboardTeamFilters, team];
+      }
+      render();
+      return;
+    }
+    if (action === "toggle-header-stats") {
+      state.showHeaderStats = !state.showHeaderStats;
+      render();
+      return;
+    }
+    if (action === "toggle-dashboard-filters") {
+      state.showDashboardFilters = !state.showDashboardFilters;
+      render();
+      return;
+    }
+    if (action === "toggle-history-filters") {
+      state.showHistoryFilters = !state.showHistoryFilters;
+      render();
+      return;
+    }
+    if (action === "clear-dashboard-team-filters") {
+      state.dashboardTeamFilters = [];
+      render();
+      return;
+    }
+    if (action === "clear-history-filters") {
+      state.historyFilters = {
+        search: "",
+        sector: "",
+        team: "",
+        dischargeFrom: "",
+        dischargeTo: "",
+        surgeon: "",
+        diagnosis: "",
+        surgeryName: "",
+      };
       render();
       return;
     }
@@ -1051,7 +1380,7 @@
       return;
     }
     if (action === "add-lab-date") {
-      state.modal.labs.dates.push(nowIsoDate());
+      state.modal.labs.dates.push(nextUniqueLabDate(state.modal.labs.dates, nowIsoDate()));
       render();
       return;
     }
@@ -1085,6 +1414,21 @@
     }
     if (action === "remove-image") {
       state.modal.images.splice(Number(event.currentTarget.dataset.index), 1);
+      render();
+      return;
+    }
+    if (action === "add-note-entry") {
+      const text = String(state.modal.noteDraft || "").trim();
+      if (!text) return;
+      state.modal.notesEntries = [
+        ...(state.modal.notesEntries || []),
+        {
+          id: uid(),
+          text,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      state.modal.noteDraft = "";
       render();
       return;
     }
@@ -1143,8 +1487,15 @@
       return;
     }
     if (action === "confirm-reactivate") {
-      const targetNumber = Number(document.getElementById("reactivate-bed").value);
+      const select = document.getElementById("reactivate-bed");
+      if (!select || !select.value) {
+        return;
+      }
+      const targetNumber = Number(select.value);
       const targetBed = getBeds().find((bed) => bed.bedNumber === targetNumber);
+      if (!targetBed) {
+        return;
+      }
       const revived = cleanCase({
         ...state.reactivateCase,
         id: uid(),
@@ -1164,16 +1515,38 @@
   }
 
   function cleanCase(caseData) {
+    const normalized = normalizeCaseData(caseData);
     return {
-      ...cloneCase(caseData),
-      tags: (caseData.tags || []).filter((tag) => String(tag.label || "").trim()),
-      diagnoses: (caseData.diagnoses || []).filter((item) => String(item || "").trim()),
-      surgeries: (caseData.surgeries || []).filter((item) => item.name || item.date || item.surgeon),
+      ...cloneCase(normalized),
+      tags: (normalized.tags || []).filter((tag) => String(tag.label || "").trim()),
+      diagnoses: (normalized.diagnoses || []).filter((item) => String(item || "").trim()),
+      surgeries: (normalized.surgeries || []).filter((item) => item.name || item.date || item.surgeon),
+      notesEntries: getCaseNotesEntries(normalized),
+      noteDraft: "",
+      notes: "",
     };
   }
 
   function cloneCase(caseData) {
     return JSON.parse(JSON.stringify(caseData));
+  }
+
+  function normalizeCaseData(caseData) {
+    const nextCase = cloneCase(caseData);
+    if (!Array.isArray(nextCase.notesEntries)) {
+      nextCase.notesEntries = [];
+    }
+    if (String(nextCase.notes || "").trim() && !nextCase.notesEntries.length) {
+      nextCase.notesEntries.push({
+        id: uid(),
+        text: nextCase.notes,
+        createdAt: nextCase.updatedAt || nextCase.archivedAt || nextCase.createdAt || new Date().toISOString(),
+      });
+    }
+    if (typeof nextCase.noteDraft !== "string") {
+      nextCase.noteDraft = "";
+    }
+    return nextCase;
   }
 
   function hexToRgba(hex, alpha) {

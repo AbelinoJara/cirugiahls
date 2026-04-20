@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CirugiaHLS</title>
+    <title>Monitor de Pacientes</title>
     <style>
       :root {
         --bg: #f5f5f4;
@@ -27,23 +27,23 @@
       .app-shell { min-height: 100vh; }
       .container { width: min(1320px, calc(100vw - 32px)); margin: 0 auto; }
       .header { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); background: rgba(255,255,255,0.86); backdrop-filter: blur(16px); }
-      .header-inner { padding: 24px 0; display: grid; gap: 24px; }
+      .header-inner { padding: 18px 0; display: grid; gap: 16px; }
       .header-top { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
       .eyebrow { font-size: 12px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--muted); }
       h1, h2, h3, h4, p { margin: 0; }
       h1 { font-size: clamp(30px, 4vw, 42px); line-height: 1.05; }
       h2 { font-size: 24px; line-height: 1.15; }
       h3 { font-size: 18px; line-height: 1.2; }
-      .lead { margin-top: 12px; max-width: 760px; color: #57534e; line-height: 1.65; }
+      .lead { margin-top: 10px; max-width: 760px; color: #57534e; line-height: 1.55; }
       .pill-row, .stats-grid, .grid, .cards { display: grid; gap: 16px; }
-      .stats-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+      .stats-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
       .card, .panel { background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: var(--radius-xl); }
-      .card { padding: 20px; }
+      .card { padding: 14px 16px; }
       .panel { padding: 24px; }
-      .stat-label { font-size: 14px; color: var(--muted); }
-      .stat-value { margin-top: 8px; font-size: 34px; font-weight: 700; letter-spacing: -0.03em; }
-      .stat-help { margin-top: 8px; color: var(--muted); font-size: 14px; }
-      .tabs { display: flex; gap: 12px; flex-wrap: wrap; }
+      .stat-label { font-size: 12px; color: var(--muted); }
+      .stat-value { margin-top: 4px; font-size: 24px; font-weight: 700; letter-spacing: -0.03em; }
+      .stat-help { margin-top: 4px; color: var(--muted); font-size: 12px; }
+      .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
       .btn, .input, .select, .textarea, .tag, .chip { border-radius: 999px; border: 1px solid transparent; }
       .btn { cursor: pointer; transition: 0.2s ease; padding: 12px 18px; font-weight: 600; }
       .btn:hover { transform: translateY(-1px); }
@@ -53,25 +53,42 @@
       .btn-light:hover { background: #fafaf9; }
       .btn-danger { background: #e11d48; color: white; }
       .btn-danger:hover { background: #be123c; }
-      .session-badge { padding: 10px 16px; background: #fafaf9; border-radius: 999px; border: 1px solid var(--line); color: #57534e; }
+      .session-badge { padding: 8px 12px; background: #fafaf9; border-radius: 999px; border: 1px solid var(--line); color: #57534e; font-size: 13px; }
       .main { padding: 32px 0 48px; }
       .sector-section { margin-bottom: 28px; }
       .section-top { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
-      .sector-beds { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
-      .bed-card { width: 100%; text-align: left; border-radius: 24px; border: 1px solid #d6d3d1; background: #fafaf9; padding: 18px; cursor: pointer; transition: 0.2s ease; }
+      .sector-beds { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+      .room-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-flow: dense; gap: 14px; align-items: start; }
+      .room-card { min-width: 0; grid-column: span 6; }
+      .room-card.span-3 { grid-column: span 3; }
+      .room-card.span-4 { grid-column: span 4; }
+      .room-card.span-5 { grid-column: span 5; }
+      .room-card.span-6 { grid-column: span 6; }
+      .room-card.span-7 { grid-column: span 7; }
+      .room-card.span-8 { grid-column: span 8; }
+      .room-card.span-12 { grid-column: span 12; }
+      .room-card .sector-beds { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+      .room-card.beds-2 .sector-beds { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .room-card.beds-2-vertical .sector-beds { grid-template-columns: 1fr; }
+      .room-card.beds-3 .sector-beds { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .room-card.beds-4 .sector-beds { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .room-card.beds-5 .sector-beds { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+      .room-card.beds-6 .sector-beds { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+      .bed-card { position: relative; width: 100%; height: 228px; text-align: left; border-radius: 20px; border: 1px solid #d6d3d1; background: #fafaf9; padding: 14px; cursor: pointer; transition: 0.2s ease; overflow: hidden; display: flex; flex-direction: column; }
       .bed-card:hover { transform: translateY(-2px); border-color: #a8a29e; background: white; }
       .bed-card.occupied { background: #0c0a09; border-color: #0c0a09; color: white; }
+      .bed-team-line { position: absolute; top: 0; left: 0; right: 0; height: 5px; }
       .bed-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-      .small { font-size: 14px; color: var(--muted); }
+      .small { font-size: 12px; color: var(--muted); }
       .occupied .small { color: #d6d3d1; }
-      .status { padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+      .status { padding: 5px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
       .status.free { background: #dcfce7; color: #15803d; }
       .status.occupied { background: rgba(255,255,255,0.12); color: white; }
-      .bed-body { margin-top: 28px; }
-      .empty-box { border-radius: 20px; border: 1px dashed #d6d3d1; text-align: center; padding: 34px 16px; color: var(--muted); font-size: 14px; }
-      .patient-name { font-size: 22px; font-weight: 700; line-height: 1.2; }
-      .team-badge, .tag { display: inline-flex; align-items: center; padding: 7px 12px; border-radius: 999px; border: 1px solid transparent; font-size: 12px; font-weight: 700; }
-      .tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+      .bed-body { margin-top: 18px; flex: 1; display: flex; flex-direction: column; }
+      .empty-box { border-radius: 16px; border: 1px dashed #d6d3d1; text-align: center; padding: 24px 12px; color: var(--muted); font-size: 13px; flex: 1; display: flex; align-items: center; justify-content: center; }
+      .patient-name { font-size: 18px; font-weight: 700; line-height: 1.15; }
+      .team-badge, .tag { display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 999px; border: 1px solid transparent; font-size: 11px; font-weight: 700; }
+      .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 10px; align-content: flex-start; min-height: 34px; }
       .history-list { display: grid; gap: 18px; }
       .history-top { display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
       .history-actions { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -118,10 +135,44 @@
       .metric-value { margin-top: 8px; font-size: 30px; font-weight: 700; }
       .error { padding: 12px 14px; border-radius: 18px; background: #fff1f2; border: 1px solid #fecdd3; color: #be123c; font-size: 14px; }
       .muted-box { margin-top: 20px; padding: 14px; border-radius: 22px; border: 1px solid var(--line); background: #fafaf9; color: #57534e; font-size: 14px; line-height: 1.6; }
+      .compact-panel { padding: 14px 16px; border-radius: 22px; }
+      .compact-summary { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+      .compact-chip { padding: 7px 10px; border-radius: 999px; border: 1px solid var(--line); background: #fafaf9; color: #57534e; font-size: 12px; }
+      .collapsible-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+      .collapsible-title { display: flex; flex-direction: column; gap: 4px; }
+      .collapsible-body { margin-top: 12px; }
+      .btn-ghost { background: #fafaf9; border-color: #d6d3d1; color: #44403c; padding: 8px 12px; font-size: 12px; }
+      .btn-ghost:hover { background: white; }
+      .btn-compact { padding: 8px 12px; font-size: 12px; }
+      .toolbar-inline { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .brand-lockup { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+      .brand-logo-wrap { flex: 0 0 auto; width: 74px; height: 74px; overflow: hidden; border-radius: 22px; background: rgba(255,255,255,0.88); border: 1px solid var(--line); display: flex; align-items: center; justify-content: flex-start; }
+      .brand-logo-wrap.large { width: 88px; height: 88px; }
+      .brand-logo-banner { display: block; height: 100%; width: 520px; object-fit: cover; object-position: left center; margin-left: 0; filter: drop-shadow(0 6px 18px rgba(28, 25, 23, 0.05)); }
+      .brand-logo-banner.large { width: 620px; }
+      .brand-meta { display: grid; gap: 4px; }
+      .brand-hospital { font-family: Georgia, "Times New Roman", serif; font-size: 18px; letter-spacing: 0.04em; color: #78716c; line-height: 1; }
+      .brand-hospital.large { font-size: 20px; }
+      .brand-subtle { font-size: 13px; color: #a8a29e; }
 
       @media (max-width: 900px) {
         .login-grid { grid-template-columns: 1fr; }
         .metrics { grid-template-columns: 1fr; }
+        .room-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+        .room-card,
+        .room-card.span-3,
+        .room-card.span-4,
+        .room-card.span-5,
+        .room-card.span-6,
+        .room-card.span-7,
+        .room-card.span-8,
+        .room-card.span-12 { grid-column: span 3; }
+        .room-card.beds-2 .sector-beds,
+        .room-card.beds-2-vertical .sector-beds,
+        .room-card.beds-3 .sector-beds,
+        .room-card.beds-4 .sector-beds,
+        .room-card.beds-5 .sector-beds,
+        .room-card.beds-6 .sector-beds { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
 
       @media (max-width: 720px) {
@@ -130,6 +181,21 @@
         .drawer-head, .drawer-foot, .drawer-body, .panel, .card { padding-left: 16px; padding-right: 16px; }
         .drawer-head, .drawer-foot { padding-top: 16px; padding-bottom: 16px; }
         .history-top, .header-top, .section-top, .drawer-foot { flex-direction: column; align-items: stretch; }
+        .room-grid { grid-template-columns: 1fr; }
+        .room-card,
+        .room-card.span-3,
+        .room-card.span-4,
+        .room-card.span-5,
+        .room-card.span-6,
+        .room-card.span-7,
+        .room-card.span-8,
+        .room-card.span-12 { grid-column: span 1; }
+        .room-card.beds-2 .sector-beds,
+        .room-card.beds-2-vertical .sector-beds,
+        .room-card.beds-3 .sector-beds,
+        .room-card.beds-4 .sector-beds,
+        .room-card.beds-5 .sector-beds,
+        .room-card.beds-6 .sector-beds { grid-template-columns: 1fr; }
       }
     </style>
   </head>
