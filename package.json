@@ -1,0 +1,9 @@
+{
+  "name": "cirugiahls",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aplicacion web de gestion clinica para el Servicio de Cirugia CirugiaHLS.",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
