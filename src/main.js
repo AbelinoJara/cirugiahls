@@ -697,20 +697,34 @@
   function renderReactivateDialog() {
     if (!state.reactivateCase) return "";
     const freeBeds = getBeds().filter((bed) => !state.activeCases[String(bed.bedNumber)]);
+    const hasFreeBeds = freeBeds.length > 0;
+
     return `
       <div class="modal-backdrop">
         <div class="dialog">
           <h2>Reactivar caso</h2>
           <p class="lead" style="margin-top:10px;">El caso volvera al tablero activo en una cama libre y se eliminara del historial.</p>
-          <div class="field" style="margin-top:18px;">
-            <label>Cama disponible</label>
-            <select class="select" id="reactivate-bed">
-              ${freeBeds.map((bed) => `<option value="${bed.bedNumber}">Cama ${bed.bedNumber} · ${escapeHtml(bed.sector)}</option>`).join("")}
-            </select>
-          </div>
+
+          ${
+            hasFreeBeds
+              ? `
+                <div class="field" style="margin-top:18px;">
+                  <label>Cama disponible</label>
+                  <select class="select" id="reactivate-bed">
+                    ${freeBeds.map((bed) => `<option value="${bed.bedNumber}">Cama ${bed.bedNumber} · ${escapeHtml(bed.sector)}</option>`).join("")}
+                  </select>
+                </div>
+              `
+              : `
+                <div class="error" style="margin-top:18px;">
+                  No hay camas libres disponibles para reactivar este caso.
+                </div>
+              `
+          }
+
           <div class="row end" style="margin-top:22px;">
             <button class="btn btn-light" data-action="cancel-reactivate">Cancelar</button>
-            <button class="btn btn-dark" data-action="confirm-reactivate">Reactivar</button>
+            <button class="btn btn-dark" data-action="confirm-reactivate" ${!hasFreeBeds ? "disabled" : ""}>Reactivar</button>
           </div>
         </div>
       </div>
@@ -734,7 +748,7 @@
           </tr>
         </thead>
         <tbody>
-          ${Object.keys(caseData.labs.exams).map((exam, examIndex) => `
+          ${Object.keys(caseData.labs.exams).map((exam) => `
             <tr>
               <td>
                 <div class="row" style="justify-content:space-between;">
@@ -886,22 +900,36 @@
         state.modal.surgeries[Number(input.dataset.index)].name = input.value;
       });
     });
+
     app.querySelectorAll('[data-action="surgery-date"]').forEach((input) => {
       input.addEventListener("input", () => {
         state.modal.surgeries[Number(input.dataset.index)].date = input.value;
       });
     });
+
     app.querySelectorAll('[data-action="surgery-surgeon"]').forEach((input) => {
       input.addEventListener("input", () => {
         state.modal.surgeries[Number(input.dataset.index)].surgeon = input.value;
       });
     });
+
     app.querySelectorAll('[data-action="lab-date-input"]').forEach((input) => {
       input.addEventListener("input", () => {
         const index = Number(input.dataset.index);
         const previous = state.modal.labs.dates[index];
         const next = input.value;
+
+        if (!next) return;
+
+        const duplicateIndex = state.modal.labs.dates.findIndex((date, i) => date === next && i !== index);
+        if (duplicateIndex !== -1) {
+          alert("Ya existe otra columna con esa fecha.");
+          input.value = previous;
+          return;
+        }
+
         state.modal.labs.dates[index] = next;
+
         Object.keys(state.modal.labs.exams).forEach((exam) => {
           const values = state.modal.labs.exams[exam];
           if (Object.prototype.hasOwnProperty.call(values, previous)) {
@@ -911,17 +939,20 @@
         });
       });
     });
+
     app.querySelectorAll('[data-action="lab-value-input"]').forEach((input) => {
       input.addEventListener("input", () => {
         state.modal.labs.exams[input.dataset.exam][input.dataset.date] = input.value;
       });
     });
+
     app.querySelectorAll('[data-action="modal-chart-exam"]').forEach((select) => {
       select.addEventListener("change", () => {
         state.modal.selectedExam = select.value;
         render();
       });
     });
+
     app.querySelectorAll('[data-action="history-chart-exam"]').forEach((select) => {
       select.addEventListener("change", () => {
         const caseItem = state.history.find((item) => item.id === select.dataset.caseId);
@@ -961,17 +992,33 @@
   }
 
   async function appendFiles(fileList) {
-    const files = await Promise.all(Array.from(fileList || []).map(fileToImageData));
-    state.modal.images = [...(state.modal.images || []), ...files];
-    render();
+    try {
+      const files = await Promise.all(Array.from(fileList || []).map(fileToImageData));
+      state.modal.images = [...(state.modal.images || []), ...files];
+      render();
+    } catch (error) {
+      console.error(error);
+      alert("Ocurrio un error al cargar una de las imagenes.");
+    }
   }
 
   function fileToImageData(file) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
+
       reader.onload = () => {
-        resolve({ id: uid(), name: file.name, dataUrl: reader.result, createdAt: new Date().toISOString() });
+        resolve({
+          id: uid(),
+          name: file.name,
+          dataUrl: reader.result,
+          createdAt: new Date().toISOString()
+        });
       };
+
+      reader.onerror = () => {
+        reject(new Error(`No se pudo leer el archivo: ${file.name}`));
+      };
+
       reader.readAsDataURL(file);
     });
   }
@@ -994,12 +1041,14 @@
 
   function handleActionClick(event) {
     const action = event.currentTarget.dataset.action;
+
     if (action === "logout") {
       state.session = null;
       localStorage.removeItem(STORAGE_KEYS.session);
       render();
       return;
     }
+
     if (action === "open-bed") {
       const bedNumber = Number(event.currentTarget.dataset.bed);
       const bed = getBeds().find((item) => item.bedNumber === bedNumber);
@@ -1007,16 +1056,19 @@
       render();
       return;
     }
+
     if (action === "close-modal") {
       state.modal = null;
       render();
       return;
     }
+
     if (action === "set-team") {
       state.modal.team = event.currentTarget.dataset.team;
       render();
       return;
     }
+
     if (action === "add-tag") {
       const label = document.getElementById("new-tag-label").value.trim();
       const color = document.getElementById("new-tag-color").value;
@@ -1025,36 +1077,50 @@
       render();
       return;
     }
+
     if (action === "remove-tag") {
       state.modal.tags.splice(Number(event.currentTarget.dataset.index), 1);
       render();
       return;
     }
+
     if (action === "add-diagnosis") {
       state.modal.diagnoses.push("");
       render();
       return;
     }
+
     if (action === "remove-diagnosis") {
       state.modal.diagnoses.splice(Number(event.currentTarget.dataset.index), 1);
       render();
       return;
     }
+
     if (action === "add-surgery") {
       state.modal.surgeries.push({ id: uid(), name: "", date: "", surgeon: "" });
       render();
       return;
     }
+
     if (action === "remove-surgery") {
       state.modal.surgeries.splice(Number(event.currentTarget.dataset.index), 1);
       render();
       return;
     }
+
     if (action === "add-lab-date") {
-      state.modal.labs.dates.push(nowIsoDate());
+      const newDate = nowIsoDate();
+
+      if (state.modal.labs.dates.includes(newDate)) {
+        alert("Esa fecha ya existe en la grilla de laboratorio.");
+        return;
+      }
+
+      state.modal.labs.dates.push(newDate);
       render();
       return;
     }
+
     if (action === "remove-lab-date") {
       const index = Number(event.currentTarget.dataset.index);
       const removed = state.modal.labs.dates[index];
@@ -1065,6 +1131,7 @@
       render();
       return;
     }
+
     if (action === "add-exam") {
       const input = document.getElementById("new-exam-name");
       const exam = input.value.trim();
@@ -1074,22 +1141,45 @@
       render();
       return;
     }
+
     if (action === "remove-exam") {
       delete state.modal.labs.exams[event.currentTarget.dataset.exam];
+      const examNames = Object.keys(state.modal.labs.exams);
+      if (!examNames.includes(state.modal.selectedExam)) {
+        state.modal.selectedExam = examNames[0] || "";
+      }
       render();
       return;
     }
+
     if (action === "pick-images") {
       document.getElementById("image-input").click();
       return;
     }
+
     if (action === "remove-image") {
       state.modal.images.splice(Number(event.currentTarget.dataset.index), 1);
       render();
       return;
     }
+
     if (action === "save-bed") {
       if (!state.modal.patientName.trim() || !state.modal.rut.trim()) return;
+
+      const admissionDate = state.modal.admissionDate || "";
+      const dischargeDate = state.modal.dischargeDate || "";
+
+      if (admissionDate && dischargeDate && dischargeDate < admissionDate) {
+        alert("La fecha de alta no puede ser anterior a la fecha de ingreso.");
+        return;
+      }
+
+      const existingCaseInBed = state.activeCases[String(state.modal.bedNumber)];
+      if (existingCaseInBed && existingCaseInBed.id !== state.modal.id) {
+        alert("Esa cama ya fue ocupada por otro caso. Cierra y vuelve a abrir la cama antes de guardar.");
+        return;
+      }
+
       const nextCase = cleanCase(state.modal);
       state.activeCases[String(nextCase.bedNumber)] = nextCase;
       saveActiveCases();
@@ -1097,24 +1187,35 @@
       render();
       return;
     }
+
     if (action === "request-release") {
       state.releaseCase = cloneCase(state.modal);
       render();
       return;
     }
+
     if (action === "cancel-release") {
       state.releaseCase = null;
       render();
       return;
     }
+
     if (action === "confirm-release") {
       const dischargeDate = document.getElementById("release-date").value || nowIsoDate();
+      const admissionDate = state.releaseCase.admissionDate || "";
+
+      if (admissionDate && dischargeDate < admissionDate) {
+        alert("La fecha de alta no puede ser anterior a la fecha de ingreso.");
+        return;
+      }
+
       const archived = {
         ...cleanCase(state.releaseCase),
         dischargeDate,
         archivedAt: new Date().toISOString(),
-        daysHospitalized: getDayCount(state.releaseCase.admissionDate, dischargeDate),
+        daysHospitalized: getDayCount(admissionDate, dischargeDate),
       };
+
       delete state.activeCases[String(archived.bedNumber)];
       state.history.unshift(archived);
       saveActiveCases();
@@ -1125,26 +1226,47 @@
       render();
       return;
     }
+
     if (action === "toggle-history") {
       const caseId = event.currentTarget.dataset.caseId;
       state.historyExpandedId = state.historyExpandedId === caseId ? null : caseId;
       render();
       return;
     }
+
     if (action === "open-reactivate") {
       const caseItem = state.history.find((item) => item.id === event.currentTarget.dataset.caseId);
       state.reactivateCase = cloneCase(caseItem);
       render();
       return;
     }
+
     if (action === "cancel-reactivate") {
       state.reactivateCase = null;
       render();
       return;
     }
+
     if (action === "confirm-reactivate") {
-      const targetNumber = Number(document.getElementById("reactivate-bed").value);
+      const select = document.getElementById("reactivate-bed");
+      if (!select || !select.value) {
+        alert("No hay camas libres disponibles.");
+        return;
+      }
+
+      const targetNumber = Number(select.value);
       const targetBed = getBeds().find((bed) => bed.bedNumber === targetNumber);
+
+      if (!targetBed) {
+        alert("La cama seleccionada no es valida.");
+        return;
+      }
+
+      if (state.activeCases[String(targetNumber)]) {
+        alert("La cama seleccionada ya esta ocupada.");
+        return;
+      }
+
       const revived = cleanCase({
         ...state.reactivateCase,
         id: uid(),
@@ -1153,6 +1275,7 @@
         dischargeDate: "",
         archivedAt: "",
       });
+
       state.activeCases[String(targetNumber)] = revived;
       state.history = state.history.filter((item) => item.id !== state.reactivateCase.id);
       saveActiveCases();
@@ -1160,6 +1283,7 @@
       state.reactivateCase = null;
       state.view = "dashboard";
       render();
+      return;
     }
   }
 
